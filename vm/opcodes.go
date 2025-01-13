@@ -6,13 +6,19 @@ const (
 	HALT Opcode = iota
 	PUSH
 	POP
-	ADD
-	SUB
-	MUL
-	DIV
+	IADD
+	ISUB
+	IMUL
+	IDIV
+	FADD
+	FSUB
+	FMUL
+	FDIV
 	JMP
-	JNE
-	JE
+	IJNE
+	IJE
+	FJNE
+	FJE
 	EQ
 	NE
 	LT

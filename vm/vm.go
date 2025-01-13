@@ -5,13 +5,14 @@ import (
 	"encoding/binary"
 	"fmt"
 	"log"
+	"math"
 	"os"
 )
 
 type StackFrame struct {
-	Locals        map[uint16]int32
+	Locals        map[uint16]Value
 	ReturnAddress uint
-	LocalStack    []int32
+	LocalStack    []Value
 }
 
 type VM struct {
@@ -33,7 +34,7 @@ func NewVm(bytecode []byte) *VM {
 
 func (v *VM) PushFrame(returnAddress uint) {
 	frame := StackFrame{
-		Locals:        make(map[uint16]int32),
+		Locals:        make(map[uint16]Value),
 		ReturnAddress: returnAddress,
 	}
 	v.CallStack = append(v.CallStack, frame)
@@ -44,10 +45,10 @@ func (v *VM) getCurrentFrame() *StackFrame {
 	return &v.CallStack[currentFrameIdx]
 }
 
-func (v *VM) extractInt32() int32 {
+func (v *VM) extractUInt32() uint32 {
 	value := binary.BigEndian.Uint32(v.Bytecode[v.Ip : v.Ip+4])
 	v.Ip += 4
-	return int32(value)
+	return value
 }
 
 func (v *VM) extractUInt16() uint16 {
@@ -71,7 +72,7 @@ func (v *VM) Run() {
 	}
 }
 
-func (v *VM) push(value int32) {
+func (v *VM) push(value Value) {
 	if len(v.CallStack) == 0 {
 		log.Fatal("call stack empty")
 	}
@@ -80,7 +81,7 @@ func (v *VM) push(value int32) {
 	currentFrame.LocalStack = append(currentFrame.LocalStack, value)
 }
 
-func (v *VM) pop() int32 {
+func (v *VM) pop() Value {
 	if len(v.CallStack) == 0 {
 		log.Fatalf("call stack empty")
 	}
@@ -146,53 +147,152 @@ func (v *VM) execute(opcode Opcode) {
 	case HALT:
 		v.Running = false
 	case PUSH:
-		value := v.extractInt32()
-		v.push(value)
+		typeTag := v.getByte()
+		bits := v.extractUInt32()
+		var val Value
+		switch ValueKind(typeTag) {
+		case ValueInt32:
+			val = Value{kind: ValueInt32, raw: bits}
+		case ValueFloat32:
+			val = Value{kind: ValueFloat32, raw: bits}
+		}
+		v.push(val)
 	case POP:
 		v.pop()
-	case ADD:
+	case IADD:
 		v1 := v.pop()
 		v2 := v.pop()
-		v.push(v1 + v2)
-	case SUB:
+		if v1.kind != ValueInt32 || v2.kind != ValueInt32 {
+			log.Fatalf("Values need to be int32")
+		}
+		result := v1.AsInt32() + v2.AsInt32()
+		value := Int32Value(result)
+		v.push(value)
+	case ISUB:
 		v1 := v.pop()
 		v2 := v.pop()
-		v.push(v2 - v1)
-	case MUL:
+		if v1.kind != ValueInt32 || v2.kind != ValueInt32 {
+			log.Fatalf("Values need to be int32")
+		}
+		result := v1.AsInt32() - v2.AsInt32()
+		value := Int32Value(result)
+		v.push(value)
+	case IMUL:
 		v1 := v.pop()
 		v2 := v.pop()
-		v.push(v1 * v2)
+		if v1.kind != ValueInt32 || v2.kind != ValueInt32 {
+			log.Fatalf("Values need to be int32")
+		}
+		result := v1.AsInt32() * v2.AsInt32()
+		value := Int32Value(result)
+		v.push(value)
+	case IDIV:
+		v1 := v.pop()
+		v2 := v.pop()
+		if v1.kind != ValueInt32 || v2.kind != ValueInt32 {
+			log.Fatalf("Values need to be int32")
+		}
+		if v1.AsInt32() == 0 {
+			log.Fatal("Division by zero")
+		}
+		result := v2.AsInt32() / v1.AsInt32()
+		value := Int32Value(result)
+		v.push(value)
+	case FADD:
+		v1 := v.pop()
+		v2 := v.pop()
+		if v1.kind != ValueFloat32 || v2.kind != ValueFloat32 {
+			log.Fatal("Values need to be float32")
+		}
+		result := v1.AsFloat32() + v2.AsFloat32()
+		value := Float32Value(result)
+		v.push(value)
+	case FSUB:
+		v1 := v.pop()
+		v2 := v.pop()
+		if v1.kind != ValueFloat32 || v2.kind != ValueFloat32 {
+			log.Fatal("Values need to be float32")
+		}
+		result := v2.AsFloat32() - v1.AsFloat32()
+		value := Float32Value(result)
+		v.push(value)
+	case FMUL:
+		v1 := v.pop()
+		v2 := v.pop()
+		if v1.kind != ValueFloat32 || v2.kind != ValueFloat32 {
+			log.Fatal("Values need to be float32")
+		}
+		result := v1.AsFloat32() * v2.AsFloat32()
+		value := Float32Value(result)
+		v.push(value)
+	case FDIV:
+		v1 := v.pop()
+		v2 := v.pop()
+		if v1.kind != ValueFloat32 || v2.kind != ValueFloat32 {
+			log.Fatal("Values need to be float32")
+		}
+		if v1.AsFloat32() == 0 {
+			log.Fatal("Division by zero")
+		}
+		result := v2.AsFloat32() / v1.AsFloat32()
+		value := Float32Value(result)
+		v.push(value)
 	case JMP:
 		addr := uint(v.extractUInt16())
 		v.Ip = uint(addr)
 	// jump to an addr if top of stack not equal to value
-	case JNE:
+	case IJNE:
 		addr := uint(v.extractUInt16())
 		if addr >= uint(len(v.Bytecode)) {
 			log.Fatalf("Invalid address: %d", addr)
 		}
-		value := v.extractInt32()
+		value := int32(v.extractUInt32())
 		topOfStack := v.pop()
-		if value != topOfStack {
+		if topOfStack.kind != ValueInt32 {
+			log.Fatal("should be an int32")
+		}
+		if value != topOfStack.AsInt32() {
 			v.Ip = addr
 		}
-	case JE:
+	case IJE:
 		addr := uint(v.extractUInt16())
 		if addr >= uint(len(v.Bytecode)) {
 			log.Fatalf("Invalid address: %d", addr)
 		}
-		value := v.extractInt32()
+		value := int32(v.extractUInt32())
 		topOfStack := v.pop()
-		if value == topOfStack {
+		if topOfStack.kind != ValueInt32 {
+			log.Fatal("Should be an int32")
+		}
+		if value == topOfStack.AsInt32() {
 			v.Ip = addr
 		}
-	case DIV:
-		v1 := v.pop()
-		v2 := v.pop()
-		if v1 == 0 {
-			panic("Division by zero")
+	case FJNE:
+		addr := uint(v.extractUInt16())
+		if addr >= uint(len(v.Bytecode)) {
+			log.Fatalf("Invalid address: %d\n", addr)
 		}
-		v.push(v2 / v1)
+		value := math.Float32frombits(v.extractUInt32())
+		topOfStack := v.pop()
+		if topOfStack.kind != ValueFloat32 {
+			log.Fatal("Should be a float32")
+		}
+		if value != topOfStack.AsFloat32() {
+			v.Ip = addr
+		}
+	case FJE:
+		addr := uint(v.extractUInt16())
+		if addr >= uint(len(v.Bytecode)) {
+			log.Fatalf("Invalid address: %d\n", addr)
+		}
+		value := math.Float32frombits(v.extractUInt32())
+		topOfStack := v.pop()
+		if topOfStack.kind != ValueFloat32 {
+			log.Fatal("Should be a float32")
+		}
+		if value == topOfStack.AsFloat32() {
+			v.Ip = addr
+		}
 	// store top of the stack to an address
 	case STORE:
 		addr := v.extractUInt16()
@@ -212,7 +312,7 @@ func (v *VM) execute(opcode Opcode) {
 	case CALL:
 		calleeAddr := uint(v.extractUInt16())
 		nrOfArgs := uint(v.getByte())
-		var args []int32
+		var args []Value
 		for i := 0; i < int(nrOfArgs); i++ {
 			arg := v.pop()
 			args = append(args, arg)
@@ -250,51 +350,50 @@ func (v *VM) execute(opcode Opcode) {
 	case EQ:
 		v1 := v.pop()
 		v2 := v.pop()
-		if v1 == v2 {
-			v.push(1)
+		if Equals(v1, v2) {
+			v.push(Int32Value(1))
 		} else {
-			v.push(0)
+			v.push(Int32Value(0))
 		}
 	case NE:
 		v1 := v.pop()
 		v2 := v.pop()
-		if v1 != v2 {
-			v.push(1)
+		if !Equals(v1, v2) {
+			v.push(Int32Value(1))
 		} else {
-			v.push(0)
+			v.push(Int32Value(0))
 		}
 	case LT:
 		v1 := v.pop()
 		v2 := v.pop()
-		if v2 < v1 {
-			v.push(1)
+		if v2.Lesser(v1) {
+			v.push(Int32Value(1))
 		} else {
-			v.push(0)
+			v.push(Int32Value(0))
 		}
 	case LE:
 		v1 := v.pop()
 		v2 := v.pop()
-		if v2 <= v1 {
-			v.push(1)
+		if v2.LesserOrEqual(v1) {
+			v.push(Int32Value(1))
 		} else {
-			v.push(0)
+			v.push(Int32Value(0))
 		}
-
 	case GT:
 		v1 := v.pop()
 		v2 := v.pop()
-		if v2 > v1 {
-			v.push(1)
+		if !v2.Lesser(v1) {
+			v.push(Int32Value(1))
 		} else {
-			v.push(0)
+			v.push(Int32Value(0))
 		}
 	case GE:
 		v1 := v.pop()
 		v2 := v.pop()
-		if v2 >= v1 {
-			v.push(1)
+		if v1.Lesser(v2) || Equals(v1, v2) {
+			v.push(Int32Value(1))
 		} else {
-			v.push(0)
+			v.push(Int32Value(0))
 		}
 	}
 }
