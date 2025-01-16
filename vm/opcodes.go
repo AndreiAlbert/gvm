@@ -30,4 +30,9 @@ const (
 	CALL
 	RET
 	RETV
+	ALLOC
+	FREE
+	LOADH
+	STOREH
+	DUP
 )

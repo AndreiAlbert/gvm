@@ -1,4 +1,4 @@
-package vm
+package common
 
 import (
 	"fmt"
@@ -11,57 +11,75 @@ type ValueKind byte
 const (
 	ValueInt32 ValueKind = iota
 	ValueFloat32
+	ValuePtr
 )
 
 type Value struct {
-	kind ValueKind
-	raw  uint32 // 4 bytes
+	Kind ValueKind
+	Raw  uint32 // 4 bytes
+	Ptr  uintptr
 }
 
 func (v Value) AsInt32() int32 {
-	if v.kind != ValueInt32 {
-		log.Fatalf("Value is not int32, its %v\n", v.kind)
+	if v.Kind != ValueInt32 {
+		log.Fatalf("Value is not int32, its %v\n", v.Kind)
 	}
-	return int32(v.raw)
+	return int32(v.Raw)
 }
 
 func (v Value) AsFloat32() float32 {
-	if v.kind != ValueFloat32 {
-		log.Fatalf("Value is not float32, its %v\n", v.kind)
+	if v.Kind != ValueFloat32 {
+		log.Fatalf("Value is not float32, its %v\n", v.Kind)
 	}
-	return math.Float32frombits(v.raw)
+	return math.Float32frombits(v.Raw)
+}
+
+func (v Value) AsPtr() uintptr {
+	if v.Kind != ValuePtr {
+		log.Fatalf("Value is not ptr, its %v\n", v.Kind)
+	}
+	return v.Ptr
+}
+
+func PtrValue(ptr uintptr) Value {
+	return Value{
+		Kind: ValuePtr,
+		Ptr:  ptr,
+	}
 }
 
 func Int32Value(val int32) Value {
 	return Value{
-		kind: ValueInt32,
-		raw:  uint32(val),
+		Kind: ValueInt32,
+		Raw:  uint32(val),
 	}
 }
 
 func Float32Value(val float32) Value {
 	return Value{
-		kind: ValueFloat32,
-		raw:  math.Float32bits(val),
+		Kind: ValueFloat32,
+		Raw:  math.Float32bits(val),
 	}
 }
 
 func (v Value) String() string {
-	switch v.kind {
+	switch v.Kind {
 	case ValueInt32:
 		return fmt.Sprintf("%d", v.AsInt32())
 	case ValueFloat32:
 		return fmt.Sprintf("%f", v.AsFloat32())
+	case ValuePtr:
+		return fmt.Sprintf("%d", v.AsPtr())
 	default:
-		return fmt.Sprintf("<unknown ValueKind %d: raw=0x%08X>", v.kind, v.raw)
+		return fmt.Sprintf("<unknown ValueKind %d: raw=0x%08X>", v.Kind, v.Raw)
 	}
 }
 
 func Equals(v1, v2 Value) bool {
-	if v1.kind != v2.kind {
+	if v1.Kind != v2.Kind {
 		log.Fatal("type mismatch for comparison")
 	}
-	switch v1.kind {
+	switch v1.Kind {
 	case ValueFloat32:
 		return v1.AsFloat32() == v2.AsFloat32()
 	case ValueInt32:
@@ -73,10 +91,10 @@ func Equals(v1, v2 Value) bool {
 }
 
 func (v1 Value) LesserOrEqual(v2 Value) bool {
-	if v1.kind != v2.kind {
+	if v1.Kind != v2.Kind {
 		log.Fatal("Type mismatch for comaprison")
 	}
-	switch v1.kind {
+	switch v1.Kind {
 	case ValueFloat32:
 		return v1.AsFloat32() <= v2.AsFloat32()
 	case ValueInt32:
@@ -88,10 +106,10 @@ func (v1 Value) LesserOrEqual(v2 Value) bool {
 }
 
 func (v1 Value) Lesser(v2 Value) bool {
-	if v1.kind != v2.kind {
+	if v1.Kind != v2.Kind {
 		log.Fatal("Type mismatch for comaprison")
 	}
-	switch v1.kind {
+	switch v1.Kind {
 	case ValueFloat32:
 		return v1.AsFloat32() < v2.AsFloat32()
 	case ValueInt32:

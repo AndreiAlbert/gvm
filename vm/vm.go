@@ -7,6 +7,8 @@ import (
 	"log"
 	"math"
 	"os"
+	. "stack_vm/common"
+	"stack_vm/heap"
 )
 
 type StackFrame struct {
@@ -20,6 +22,7 @@ type VM struct {
 	Bytecode  []byte
 	Running   bool
 	CallStack []StackFrame
+	Heap      *heap.Heap
 }
 
 func NewVm(bytecode []byte) *VM {
@@ -27,6 +30,7 @@ func NewVm(bytecode []byte) *VM {
 		Ip:       0,
 		Bytecode: bytecode,
 		Running:  true,
+		Heap:     heap.NewHeap(),
 	}
 	vm.PushFrame(0)
 	return vm
@@ -152,9 +156,9 @@ func (v *VM) execute(opcode Opcode) {
 		var val Value
 		switch ValueKind(typeTag) {
 		case ValueInt32:
-			val = Value{kind: ValueInt32, raw: bits}
+			val = Value{Kind: ValueInt32, Raw: bits}
 		case ValueFloat32:
-			val = Value{kind: ValueFloat32, raw: bits}
+			val = Value{Kind: ValueFloat32, Raw: bits}
 		}
 		v.push(val)
 	case POP:
@@ -162,7 +166,7 @@ func (v *VM) execute(opcode Opcode) {
 	case IADD:
 		v1 := v.pop()
 		v2 := v.pop()
-		if v1.kind != ValueInt32 || v2.kind != ValueInt32 {
+		if v1.Kind != ValueInt32 || v2.Kind != ValueInt32 {
 			log.Fatalf("Values need to be int32")
 		}
 		result := v1.AsInt32() + v2.AsInt32()
@@ -171,7 +175,7 @@ func (v *VM) execute(opcode Opcode) {
 	case ISUB:
 		v1 := v.pop()
 		v2 := v.pop()
-		if v1.kind != ValueInt32 || v2.kind != ValueInt32 {
+		if v1.Kind != ValueInt32 || v2.Kind != ValueInt32 {
 			log.Fatalf("Values need to be int32")
 		}
 		result := v1.AsInt32() - v2.AsInt32()
@@ -180,7 +184,7 @@ func (v *VM) execute(opcode Opcode) {
 	case IMUL:
 		v1 := v.pop()
 		v2 := v.pop()
-		if v1.kind != ValueInt32 || v2.kind != ValueInt32 {
+		if v1.Kind != ValueInt32 || v2.Kind != ValueInt32 {
 			log.Fatalf("Values need to be int32")
 		}
 		result := v1.AsInt32() * v2.AsInt32()
@@ -189,7 +193,7 @@ func (v *VM) execute(opcode Opcode) {
 	case IDIV:
 		v1 := v.pop()
 		v2 := v.pop()
-		if v1.kind != ValueInt32 || v2.kind != ValueInt32 {
+		if v1.Kind != ValueInt32 || v2.Kind != ValueInt32 {
 			log.Fatalf("Values need to be int32")
 		}
 		if v1.AsInt32() == 0 {
@@ -201,7 +205,7 @@ func (v *VM) execute(opcode Opcode) {
 	case FADD:
 		v1 := v.pop()
 		v2 := v.pop()
-		if v1.kind != ValueFloat32 || v2.kind != ValueFloat32 {
+		if v1.Kind != ValueFloat32 || v2.Kind != ValueFloat32 {
 			log.Fatal("Values need to be float32")
 		}
 		result := v1.AsFloat32() + v2.AsFloat32()
@@ -210,7 +214,7 @@ func (v *VM) execute(opcode Opcode) {
 	case FSUB:
 		v1 := v.pop()
 		v2 := v.pop()
-		if v1.kind != ValueFloat32 || v2.kind != ValueFloat32 {
+		if v1.Kind != ValueFloat32 || v2.Kind != ValueFloat32 {
 			log.Fatal("Values need to be float32")
 		}
 		result := v2.AsFloat32() - v1.AsFloat32()
@@ -219,7 +223,7 @@ func (v *VM) execute(opcode Opcode) {
 	case FMUL:
 		v1 := v.pop()
 		v2 := v.pop()
-		if v1.kind != ValueFloat32 || v2.kind != ValueFloat32 {
+		if v1.Kind != ValueFloat32 || v2.Kind != ValueFloat32 {
 			log.Fatal("Values need to be float32")
 		}
 		result := v1.AsFloat32() * v2.AsFloat32()
@@ -228,7 +232,7 @@ func (v *VM) execute(opcode Opcode) {
 	case FDIV:
 		v1 := v.pop()
 		v2 := v.pop()
-		if v1.kind != ValueFloat32 || v2.kind != ValueFloat32 {
+		if v1.Kind != ValueFloat32 || v2.Kind != ValueFloat32 {
 			log.Fatal("Values need to be float32")
 		}
 		if v1.AsFloat32() == 0 {
@@ -248,7 +252,7 @@ func (v *VM) execute(opcode Opcode) {
 		}
 		value := int32(v.extractUInt32())
 		topOfStack := v.pop()
-		if topOfStack.kind != ValueInt32 {
+		if topOfStack.Kind != ValueInt32 {
 			log.Fatal("should be an int32")
 		}
 		if value != topOfStack.AsInt32() {
@@ -261,7 +265,7 @@ func (v *VM) execute(opcode Opcode) {
 		}
 		value := int32(v.extractUInt32())
 		topOfStack := v.pop()
-		if topOfStack.kind != ValueInt32 {
+		if topOfStack.Kind != ValueInt32 {
 			log.Fatal("Should be an int32")
 		}
 		if value == topOfStack.AsInt32() {
@@ -274,7 +278,7 @@ func (v *VM) execute(opcode Opcode) {
 		}
 		value := math.Float32frombits(v.extractUInt32())
 		topOfStack := v.pop()
-		if topOfStack.kind != ValueFloat32 {
+		if topOfStack.Kind != ValueFloat32 {
 			log.Fatal("Should be a float32")
 		}
 		if value != topOfStack.AsFloat32() {
@@ -287,7 +291,7 @@ func (v *VM) execute(opcode Opcode) {
 		}
 		value := math.Float32frombits(v.extractUInt32())
 		topOfStack := v.pop()
-		if topOfStack.kind != ValueFloat32 {
+		if topOfStack.Kind != ValueFloat32 {
 			log.Fatal("Should be a float32")
 		}
 		if value == topOfStack.AsFloat32() {
@@ -395,5 +399,43 @@ func (v *VM) execute(opcode Opcode) {
 		} else {
 			v.push(Int32Value(0))
 		}
+	case ALLOC:
+		topOfStack := v.pop()
+		if topOfStack.Kind != ValueInt32 {
+			log.Fatalf("size should be an integer")
+		}
+		bytes := uintptr(topOfStack.AsInt32())
+		ptr, err := v.Heap.Allocate(bytes)
+		fmt.Printf("allocating %d\n", ptr)
+		if err != nil {
+			log.Fatal(err)
+		}
+		v.push(PtrValue(ptr))
+	case FREE:
+		ptr := v.pop().AsPtr()
+		fmt.Printf("freeing %d\n", ptr)
+		err := v.Heap.Free(ptr)
+		if err != nil {
+			log.Fatal(err)
+		}
+	case LOADH:
+		ptr := v.pop().AsPtr()
+		fmt.Printf("loading %d\n", ptr)
+		value, err := v.Heap.LoadValue(ptr)
+		if err != nil {
+			log.Fatal(err)
+		}
+		v.push(*value)
+	case STOREH:
+		value := v.pop()
+		ptr := v.pop().AsPtr()
+		err := v.Heap.StoreValue(ptr, value)
+		if err != nil {
+			log.Fatal(err)
+		}
+	case DUP:
+		topOfStack := v.pop()
+		v.push(topOfStack)
+		v.push(topOfStack)
 	}
 }
