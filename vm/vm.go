@@ -448,5 +448,8 @@ func (v *VM) execute(opcode Opcode) {
 			log.Fatal(err)
 		}
 		v.push(PtrValue(ptr))
+	case SYSCALL:
+		call := Systemcall(v.extractUInt16())
+		v.executeSystemCall(call)
 	}
 }

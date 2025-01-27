@@ -36,4 +36,5 @@ const (
 	STOREH
 	DUP
 	STRALLOC
+	SYSCALL
 )

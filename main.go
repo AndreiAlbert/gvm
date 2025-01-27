@@ -24,6 +24,8 @@ func main() {
 		byte(vm.STRALLOC),
 		0x00, 0x05,
 		'h', 'e', 'l', 'l', 'o',
+		byte(vm.SYSCALL),
+		0x00, byte(vm.STR_LEN),
 		byte(vm.HALT),
 	}
 	v := vm.NewVm(bytecode)
