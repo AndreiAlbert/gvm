@@ -49,27 +49,62 @@ func (heap *Heap) Free(ptr uintptr) error {
 }
 
 func (heap *Heap) StoreValue(ptr uintptr, value Value) error {
-	size := unsafe.Sizeof(value)
 	mem, exists := heap.Memory[ptr]
 	if !exists {
-		return errors.New("Invalid memory address")
+		return errors.New("invalid memory address")
 	}
-	if uintptr(len(mem)) < size {
-		return errors.New("memory access out of bounds")
+	mem[0] = byte(value.Kind)
+	var requiredSize uintptr
+	switch value.Kind {
+	case ValueInt32, ValueFloat32:
+		requiredSize = 5 // type tag + 4 bytes
+	case ValuePtr:
+		requiredSize = 1 + unsafe.Sizeof(uintptr(0))
 	}
-	*(*Value)(unsafe.Pointer(ptr)) = value
-	fmt.Printf("Allocated value: %v at address: %d\n", value, ptr)
+	if uintptr(len(mem)) < requiredSize {
+		return errors.New("Memory access out of bounds")
+	}
+	switch value.Kind {
+	case ValueInt32:
+		*(*int32)(unsafe.Pointer(ptr + 1)) = value.AsInt32()
+	case ValueFloat32:
+		*(*float32)(unsafe.Pointer(ptr + 1)) = value.AsFloat32()
+	case ValuePtr:
+		*(*uintptr)(unsafe.Pointer(ptr + 1)) = value.AsPtr()
+	}
 	return nil
 }
 
 func (heap *Heap) LoadValue(ptr uintptr) (*Value, error) {
-	size := unsafe.Sizeof(Value{})
 	mem, exists := heap.Memory[ptr]
 	if !exists {
 		return nil, errors.New("Invalid memory address")
 	}
-	if uintptr(len(mem)) < size {
+
+	if len(mem) < 1 {
 		return nil, errors.New("memory access out of bounds")
 	}
-	return (*Value)(unsafe.Pointer(ptr)), nil
+
+	kind := ValueKind(mem[0])
+	var value Value
+	value.Kind = kind
+	switch kind {
+	case ValueInt32:
+		if len(mem) < 5 { // tag + int32
+			return nil, errors.New("memory access out of bounds")
+		}
+		value.Raw = uint32(*(*int32)(unsafe.Pointer(ptr + 1)))
+	case ValueFloat32:
+		if len(mem) < 5 { // tag + float32
+			return nil, errors.New("memory access out of bounds")
+		}
+		value.Raw = *(*uint32)(unsafe.Pointer(ptr + 1))
+	case ValuePtr:
+		ptrSize := unsafe.Sizeof(uintptr(0))
+		if uintptr(len(mem)) < 1+ptrSize {
+			return nil, errors.New("memory access out of bounds")
+		}
+		value.Ptr = *(*uintptr)(unsafe.Pointer(ptr + 1))
+	}
+	return &value, nil
 }
