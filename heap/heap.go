@@ -3,6 +3,7 @@ package heap
 import (
 	"errors"
 	"fmt"
+	"log"
 	. "stack_vm/common"
 	"syscall"
 	"unsafe"
@@ -107,4 +108,74 @@ func (heap *Heap) LoadValue(ptr uintptr) (*Value, error) {
 		value.Ptr = *(*uintptr)(unsafe.Pointer(ptr + 1))
 	}
 	return &value, nil
+}
+
+func (heap *Heap) AllocateString(s string) (uintptr, error) {
+	// type tag + length + actual string
+	totalSize := uintptr(5 + len(s))
+	ptr, err := heap.Allocate(totalSize)
+	if err != nil {
+		return 0, err
+	}
+	heap.Memory[ptr][0] = byte(ValueString)
+	*(*int32)(unsafe.Pointer(ptr + 1)) = int32(len(s))
+	copy(heap.Memory[ptr][5:], s)
+	return ptr, nil
+}
+
+func (heap *Heap) LoadString(ptr uintptr) (string, error) {
+	mem, exists := heap.Memory[ptr]
+	if !exists {
+		return "", errors.New("Invalid memory address")
+	}
+	if ValueKind(mem[0]) != ValueString {
+		return "", errors.New("Not a string value")
+	}
+	length := *(*int32)(unsafe.Pointer(ptr + 1))
+	if len(mem) < 5+int(length) {
+		return "", errors.New("memory access out of bounds")
+	}
+	return string(mem[5 : 5+length]), nil
+}
+
+func (heap *Heap) Debug() {
+	log.Printf("[HEAP DEBUG] Current memory map:")
+	if len(heap.Memory) == 0 {
+		log.Println("No memory allocated on the heap")
+		return
+	}
+	for ptr, mem := range heap.Memory {
+		log.Printf("Address: %d, Size: %d bytes", ptr, len(mem))
+		if len(mem) <= 0 {
+			continue
+		}
+		kind := ValueKind(mem[0])
+		switch kind {
+		case ValueInt32:
+			if len(mem) >= 5 {
+				value := *(*int32)(unsafe.Pointer(ptr + 1))
+				log.Printf("Decoded int32: %d\n", value)
+			}
+		case ValueFloat32:
+			if len(mem) >= 5 {
+				value := *(*float32)(unsafe.Pointer(ptr + 1))
+				log.Printf("Decoded float32: %f\n", value)
+			}
+		case ValueString:
+			if len(mem) >= 5 {
+				length := *(*int32)(unsafe.Pointer(ptr + 1))
+				if len(mem) >= 5+int(length) {
+					log.Printf("Decoded string: %s\n", string(mem[5:5+length]))
+				}
+			}
+		case ValuePtr:
+			if len(mem) > 1 {
+				ptrValue := *(*uintptr)(unsafe.Pointer(ptr + 1))
+				log.Printf("Decoded pointer: %d\n", ptrValue)
+			}
+		default:
+			log.Printf("Unkown value: %v\n", kind)
+		}
+	}
+	log.Println()
 }

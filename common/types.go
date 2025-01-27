@@ -12,6 +12,7 @@ const (
 	ValueInt32 ValueKind = iota
 	ValueFloat32
 	ValuePtr
+	ValueString
 )
 
 type Value struct {
@@ -68,7 +69,7 @@ func (v Value) String() string {
 		return fmt.Sprintf("%d", v.AsInt32())
 	case ValueFloat32:
 		return fmt.Sprintf("%f", v.AsFloat32())
-	case ValuePtr:
+	case ValuePtr, ValueString:
 		return fmt.Sprintf("%d", v.AsPtr())
 	default:
 		return fmt.Sprintf("<unknown ValueKind %d: raw=0x%08X>", v.Kind, v.Raw)

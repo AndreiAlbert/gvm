@@ -147,6 +147,7 @@ func (v *VM) debugState(opcode Opcode) {
 
 func (v *VM) execute(opcode Opcode) {
 	v.debugState(opcode)
+	v.Heap.Debug()
 	switch opcode {
 	case HALT:
 		v.Running = false
@@ -422,6 +423,7 @@ func (v *VM) execute(opcode Opcode) {
 		ptr := v.pop().AsPtr()
 		fmt.Printf("loading %d\n", ptr)
 		value, err := v.Heap.LoadValue(ptr)
+		fmt.Printf("%v\n", value)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -437,5 +439,14 @@ func (v *VM) execute(opcode Opcode) {
 		topOfStack := v.pop()
 		v.push(topOfStack)
 		v.push(topOfStack)
+	case STRALLOC:
+		length := v.extractUInt16()
+		data := string(v.Bytecode[v.Ip : v.Ip+uint(length)])
+		v.Ip += uint(length)
+		ptr, err := v.Heap.AllocateString(data)
+		if err != nil {
+			log.Fatal(err)
+		}
+		v.push(PtrValue(ptr))
 	}
 }

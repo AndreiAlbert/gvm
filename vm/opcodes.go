@@ -35,4 +35,5 @@ const (
 	LOADH
 	STOREH
 	DUP
+	STRALLOC
 )

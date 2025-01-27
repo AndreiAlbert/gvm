@@ -21,16 +21,9 @@ func main() {
 	// floatBites2 := to32bits(2.0)
 	fmt.Printf("size is: %d\n", unsafe.Sizeof(common.Value{}))
 	bytecode := []byte{
-		byte(vm.PUSH),
-		byte(common.ValueInt32),
-		0x00, 0x00, 0x00, 0x10,
-		byte(vm.ALLOC),
-		byte(vm.DUP),
-		byte(vm.PUSH),
-		byte(common.ValueInt32),
-		0x00, 0x00, 0x00, 0x45,
-		byte(vm.STOREH),
-		byte(vm.LOADH),
+		byte(vm.STRALLOC),
+		0x00, 0x05,
+		'h', 'e', 'l', 'l', 'o',
 		byte(vm.HALT),
 	}
 	v := vm.NewVm(bytecode)
