@@ -448,6 +448,30 @@ func (v *VM) execute(opcode Opcode) {
 			log.Fatal(err)
 		}
 		v.push(PtrValue(ptr))
+	case NEWARR:
+		elementKind := ValueKind(v.getByte())
+		length := v.pop().AsInt32()
+		ptr, err := v.Heap.AllocateArray(elementKind, length)
+		if err != nil {
+			log.Fatal(err)
+		}
+		v.push(PtrValue(ptr))
+	case LDELEM:
+		index := v.pop().AsInt32()
+		arrayPtr := v.pop().AsPtr()
+		value, err := v.Heap.GetArrayElement(arrayPtr, index)
+		if err != nil {
+			log.Fatal(err)
+		}
+		v.push(*value)
+	case STELEM:
+		value := v.pop()
+		index := v.pop().AsInt32()
+		arrayPtr := v.pop().AsPtr()
+		err := v.Heap.SetArrayElement(arrayPtr, index, value)
+		if err != nil {
+			log.Fatal(err)
+		}
 	case SYSCALL:
 		call := Systemcall(v.extractUInt16())
 		v.executeSystemCall(call)

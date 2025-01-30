@@ -37,4 +37,7 @@ const (
 	DUP
 	STRALLOC
 	SYSCALL
+	NEWARR
+	LDELEM // load element from array
+	STELEM // store element to array
 )

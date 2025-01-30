@@ -138,6 +138,91 @@ func (heap *Heap) LoadString(ptr uintptr) (string, error) {
 	return string(mem[5 : 5+length]), nil
 }
 
+func getElementSize(kind ValueKind) uintptr {
+	switch kind {
+	case ValueFloat32, ValueInt32:
+		return 4
+	case ValuePtr, ValueString, ValueArray:
+		return unsafe.Sizeof(uintptr(0))
+	default:
+		log.Fatalf("Unsupported array element type: %v\n", kind)
+		return 0
+	}
+}
+
+func (heap *Heap) AllocateArray(elementKind ValueKind, length int32) (uintptr, error) {
+	elementSize := getElementSize(elementKind)
+	// type tag(1) + element type (1) + size (4) + array elements
+	totalSize := uintptr(1 + 1 + 4 + (elementSize * uintptr(length)))
+	ptr, err := heap.Allocate(totalSize)
+	if err != nil {
+		return 0, err
+	}
+	mem := heap.Memory[ptr]
+	mem[0] = byte(ValueArray)
+	mem[1] = byte(elementKind)
+	*(*int32)(unsafe.Pointer(ptr + 2)) = length
+	return ptr, nil
+}
+
+func (heap *Heap) SetArrayElement(arrayPtr uintptr, index int32, value Value) error {
+	mem, exists := heap.Memory[arrayPtr]
+	if !exists {
+		return errors.New("Invalid memory access")
+	}
+	if ValueKind(mem[0]) != ValueArray {
+		return errors.New("Not an array")
+	}
+	elementKind := ValueKind(mem[1])
+	length := *(*int32)(unsafe.Pointer(arrayPtr + 2))
+	if index < 0 || index >= length {
+		return errors.New("Array index out of bounds!")
+	}
+	if elementKind != value.Kind {
+		return fmt.Errorf("Type mismatch: expected %v, got %v\n", elementKind, value.Kind)
+	}
+	elementSize := getElementSize(elementKind)
+	elementPtr := arrayPtr + 6 + uintptr(index)*elementSize
+	switch elementKind {
+	case ValueInt32, ValueFloat32:
+		*(*uint32)(unsafe.Pointer(elementPtr)) = value.Raw
+	case ValuePtr, ValueString:
+		*(*uintptr)(unsafe.Pointer(elementPtr)) = value.Ptr
+	default:
+		return fmt.Errorf("Unsupported element type: %v\n", elementKind)
+	}
+	return nil
+}
+
+func (heap *Heap) GetArrayElement(arrayPtr uintptr, index int32) (*Value, error) {
+	mem, exists := heap.Memory[arrayPtr]
+	if !exists {
+		return nil, errors.New("Invalid memory access")
+	}
+	if ValueKind(mem[0]) != ValueArray {
+		return nil, errors.New("Not an array")
+	}
+	elementKind := ValueKind(mem[1])
+	length := *(*int32)(unsafe.Pointer(arrayPtr + 2))
+	if index < 0 || index >= length {
+		return nil, errors.New("Array index out of bounds")
+	}
+	elementSize := getElementSize(elementKind)
+	elementPtr := arrayPtr + 6 + uintptr(index)*elementSize
+	value := &Value{
+		Kind: elementKind,
+	}
+	switch elementKind {
+	case ValueInt32, ValueFloat32:
+		value.Raw = *(*uint32)(unsafe.Pointer(elementPtr))
+	case ValuePtr, ValueString:
+		value.Ptr = *(*uintptr)(unsafe.Pointer(elementPtr))
+	default:
+		return nil, fmt.Errorf("Unsupported element type: %v\n", elementKind)
+	}
+	return value, nil
+}
+
 func (heap *Heap) Debug() {
 	log.Printf("[HEAP DEBUG] Current memory map:")
 	if len(heap.Memory) == 0 {
@@ -172,6 +257,27 @@ func (heap *Heap) Debug() {
 			if len(mem) > 1 {
 				ptrValue := *(*uintptr)(unsafe.Pointer(ptr + 1))
 				log.Printf("Decoded pointer: %d\n", ptrValue)
+			}
+		case ValueArray:
+			if len(mem) >= 6 {
+				elementKind := ValueKind(mem[1])
+				length := *(*int32)(unsafe.Pointer(ptr + 2))
+				log.Printf("Decoded array: type=%v, length=%d\n", elementKind, length)
+				elementSize := getElementSize(elementKind)
+				for i := int32(0); i < length; i++ {
+					elementPtr := ptr + 6 + uintptr(i)*elementSize
+					switch elementKind {
+					case ValueInt32:
+						value := *(*int32)(unsafe.Pointer(elementPtr))
+						log.Printf("  [%d] = %d\n", i, value)
+					case ValueFloat32:
+						value := *(*float32)(unsafe.Pointer(elementPtr))
+						log.Printf("  [%d] = %f\n", i, value)
+					case ValuePtr, ValueString:
+						value := *(*uintptr)(unsafe.Pointer(elementPtr))
+						log.Printf("  [%d] = ptr(%d)\n", i, value)
+					}
+				}
 			}
 		default:
 			log.Printf("Unkown value: %v\n", kind)

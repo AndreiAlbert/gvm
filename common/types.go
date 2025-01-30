@@ -13,6 +13,7 @@ const (
 	ValueFloat32
 	ValuePtr
 	ValueString
+	ValueArray
 )
 
 type Value struct {
