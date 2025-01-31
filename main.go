@@ -2,9 +2,7 @@ package main
 
 import (
 	"encoding/binary"
-	"fmt"
 	"math"
-	"unsafe"
 
 	"stack_vm/common"
 	"stack_vm/vm"
@@ -19,14 +17,23 @@ func to32bits(f float32) [4]byte {
 func main() {
 	// floatBites := to32bits(5.0)
 	// floatBites2 := to32bits(2.0)
-	fmt.Printf("size is: %d\n", unsafe.Sizeof(common.Value{}))
 	bytecode := []byte{
-		byte(vm.STRALLOC),
-		0x00, 0x05,
-		'h', 'e', 'l', 'l', 'o',
-		byte(vm.SYSCALL),
-		0x00, byte(vm.STR_LEN),
+		byte(vm.FUNC),
+		byte(vm.FUNC_MAIN),
+		0x00, 0x00,
+		byte(common.VoidValue),
+		byte(vm.CALL),
+		0x00, 0x0E,
 		byte(vm.HALT),
+
+		byte(vm.FUNC),
+		byte(vm.FUNC_NORMAL),
+		0x00, 0x00,
+		byte(common.ValueInt32),
+		byte(vm.PUSH),
+		byte(common.ValueInt32),
+		0x00, 0x00, 0x00, 0x45,
+		byte(vm.RET),
 	}
 	v := vm.NewVm(bytecode)
 	v.Run()

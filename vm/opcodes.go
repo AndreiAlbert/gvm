@@ -40,4 +40,7 @@ const (
 	NEWARR
 	LDELEM // load element from array
 	STELEM // store element to array
+	FUNC
+	FUNC_NORMAL
+	FUNC_MAIN
 )

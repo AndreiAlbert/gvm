@@ -14,6 +14,7 @@ const (
 	ValuePtr
 	ValueString
 	ValueArray
+	VoidValue
 )
 
 type Value struct {

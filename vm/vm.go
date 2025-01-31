@@ -9,7 +9,15 @@ import (
 	"os"
 	. "stack_vm/common"
 	"stack_vm/heap"
+	"strings"
 )
+
+type FunctionSignature struct {
+	Address    uint
+	ParamCount uint16
+	ReturnType ValueKind
+	isMain     bool
+}
 
 type StackFrame struct {
 	Locals        map[uint16]Value
@@ -23,17 +31,64 @@ type VM struct {
 	Running   bool
 	CallStack []StackFrame
 	Heap      *heap.Heap
+	Functions map[uint]FunctionSignature
+}
+
+func (f FunctionSignature) String() string {
+	var str strings.Builder
+	if f.isMain {
+		str.WriteString("Found main function\n")
+	}
+	fmt.Fprintf(&str, "Number of arguments: %d\n", f.ParamCount)
+	fmt.Fprintf(&str, "Address of the body: %d\n", f.Address)
+	fmt.Fprintf(&str, "Return type: %v\n", f.ReturnType)
+	return str.String()
 }
 
 func NewVm(bytecode []byte) *VM {
 	vm := &VM{
-		Ip:       0,
-		Bytecode: bytecode,
-		Running:  true,
-		Heap:     heap.NewHeap(),
+		Ip:        0,
+		Bytecode:  bytecode,
+		Running:   true,
+		Heap:      heap.NewHeap(),
+		Functions: make(map[uint]FunctionSignature),
 	}
+	vm.buildFunctionTable()
 	vm.PushFrame(0)
 	return vm
+}
+
+func (v *VM) buildFunctionTable() {
+	ip := uint(0)
+	mainAddr := uint(0)
+	foudnMain := false
+	for ip < uint(len(v.Bytecode)) {
+		if v.Bytecode[ip] == byte(FUNC) {
+			ip++
+			isMain := v.Bytecode[ip] == byte(FUNC_MAIN)
+			ip++
+			signature := FunctionSignature{
+				Address:    ip + 3, // skip metadata, get to the 'body' of the function
+				ParamCount: binary.BigEndian.Uint16(v.Bytecode[ip : ip+2]),
+				ReturnType: ValueKind(v.Bytecode[ip+2]),
+			}
+			if isMain && foudnMain {
+				log.Fatal("Multiple main functions")
+			} else if isMain {
+				mainAddr = signature.Address
+				foudnMain = true
+				signature.isMain = true
+			}
+			v.Functions[signature.Address] = signature
+			ip += 2
+		} else {
+			ip++
+		}
+	}
+	if !foudnMain {
+		log.Fatal("No main function found")
+	}
+	v.Ip = mainAddr
 }
 
 func (v *VM) PushFrame(returnAddress uint) {
@@ -86,6 +141,8 @@ func (v *VM) push(value Value) {
 }
 
 func (v *VM) pop() Value {
+	fmt.Println("calling pop for some fucking reason")
+	fmt.Printf("CE PULA MEA: %d\n", v.Ip)
 	if len(v.CallStack) == 0 {
 		log.Fatalf("call stack empty")
 	}
@@ -105,6 +162,13 @@ func (v *VM) debugState(opcode Opcode) {
 	fmt.Println("========================================")
 	fmt.Printf("  IP:     %d\n", v.Ip)
 	fmt.Printf("  Opcode: %v\n\n", opcode)
+	fmt.Println("========================================")
+	fmt.Printf("Functions table:\n")
+	for _, f := range v.Functions {
+		fmt.Println(f)
+	}
+	fmt.Println("========================================")
+	fmt.Println()
 	if len(v.CallStack) == 0 {
 		fmt.Println("  Call Stack: [empty]")
 	} else {
@@ -152,6 +216,7 @@ func (v *VM) execute(opcode Opcode) {
 	case HALT:
 		v.Running = false
 	case PUSH:
+		fmt.Println("am ajuns la push??")
 		typeTag := v.getByte()
 		bits := v.extractUInt32()
 		var val Value
@@ -163,6 +228,7 @@ func (v *VM) execute(opcode Opcode) {
 		}
 		v.push(val)
 	case POP:
+		fmt.Printf("aparent apelam pop din switch DE CE: %d\n", v.Ip)
 		v.pop()
 	case IADD:
 		v1 := v.pop()
@@ -315,19 +381,25 @@ func (v *VM) execute(opcode Opcode) {
 		v.push(value)
 	//call to an address
 	case CALL:
-		calleeAddr := uint(v.extractUInt16())
-		nrOfArgs := uint(v.getByte())
+		calleAddr := uint(v.extractUInt16())
+		signature, exists := v.Functions[calleAddr]
+		if !exists {
+			log.Fatalf("function not found at address: %d\n", calleAddr)
+		}
 		var args []Value
-		for i := 0; i < int(nrOfArgs); i++ {
-			arg := v.pop()
-			args = append(args, arg)
+		for i := 0; i < int(signature.ParamCount); i++ {
+			args = append(args, v.pop())
 		}
 		returnAddress := v.Ip
-		v.PushFrame(returnAddress)
+		frame := StackFrame{
+			Locals:        make(map[uint16]Value),
+			ReturnAddress: returnAddress,
+		}
+		v.CallStack = append(v.CallStack, frame)
 		for i := len(args) - 1; i >= 0; i-- {
 			v.push(args[i])
 		}
-		v.Ip = calleeAddr
+		v.Ip = calleAddr
 	case RET:
 		if len(v.CallStack) == 0 {
 			log.Fatal("Cannot RET: callstack empty")
@@ -337,6 +409,11 @@ func (v *VM) execute(opcode Opcode) {
 			log.Fatal("Cannot RET: local stack empty")
 		}
 		returnValue := calleeFrame.LocalStack[len(calleeFrame.LocalStack)-1]
+		signature := v.Functions[calleeFrame.ReturnAddress]
+		if returnValue.Kind != signature.ReturnType {
+			log.Fatalf("Return type mismatch: expected %v, got %v",
+				signature.ReturnType, returnValue.Kind)
+		}
 		v.CallStack = v.CallStack[:len(v.CallStack)-1]
 		if len(v.CallStack) == 0 {
 			log.Fatal("Cannot RET: callstack empty")
@@ -475,5 +552,7 @@ func (v *VM) execute(opcode Opcode) {
 	case SYSCALL:
 		call := Systemcall(v.extractUInt16())
 		v.executeSystemCall(call)
+	case FUNC:
+		v.Ip += 5
 	}
 }
