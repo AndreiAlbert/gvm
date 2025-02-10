@@ -8,19 +8,39 @@ import (
 
 type ValueKind byte
 
+type StructField struct {
+	Name       string
+	Type       ValueKind
+	Offset     uint
+	ArrayType  *ValueKind
+	StructType string
+}
+
+type StructType struct {
+	Name    string
+	Fields  []StructField
+	Size    uint
+	Methods map[string]uint
+}
+
 const (
 	ValueInt32 ValueKind = iota
 	ValueFloat32
 	ValuePtr
 	ValueString
 	ValueArray
-	VoidValue
+	ValueVoid
+	ValueStruct
 )
 
 type Value struct {
 	Kind ValueKind
 	Raw  uint32 // 4 bytes
 	Ptr  uintptr
+}
+
+func (v ValueKind) String() string {
+	return [...]string{"int32", "float32", "ptr", "string", "array", "void", "struct"}[v]
 }
 
 func (v Value) AsInt32() int32 {
@@ -71,7 +91,7 @@ func (v Value) String() string {
 		return fmt.Sprintf("%d", v.AsInt32())
 	case ValueFloat32:
 		return fmt.Sprintf("%f", v.AsFloat32())
-	case ValuePtr, ValueString:
+	case ValuePtr, ValueString, ValueStruct:
 		return fmt.Sprintf("%d", v.AsPtr())
 	default:
 		return fmt.Sprintf("<unknown ValueKind %d: raw=0x%08X>", v.Kind, v.Raw)

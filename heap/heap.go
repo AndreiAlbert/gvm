@@ -138,11 +138,11 @@ func (heap *Heap) LoadString(ptr uintptr) (string, error) {
 	return string(mem[5 : 5+length]), nil
 }
 
-func getElementSize(kind ValueKind) uintptr {
+func GetElementSize(kind ValueKind) uintptr {
 	switch kind {
 	case ValueFloat32, ValueInt32:
 		return 4
-	case ValuePtr, ValueString, ValueArray:
+	case ValuePtr, ValueString, ValueArray, ValueStruct:
 		return unsafe.Sizeof(uintptr(0))
 	default:
 		log.Fatalf("Unsupported array element type: %v\n", kind)
@@ -151,7 +151,7 @@ func getElementSize(kind ValueKind) uintptr {
 }
 
 func (heap *Heap) AllocateArray(elementKind ValueKind, length int32) (uintptr, error) {
-	elementSize := getElementSize(elementKind)
+	elementSize := GetElementSize(elementKind)
 	// type tag(1) + element type (1) + size (4) + array elements
 	totalSize := uintptr(1 + 1 + 4 + (elementSize * uintptr(length)))
 	ptr, err := heap.Allocate(totalSize)
@@ -181,7 +181,7 @@ func (heap *Heap) SetArrayElement(arrayPtr uintptr, index int32, value Value) er
 	if elementKind != value.Kind {
 		return fmt.Errorf("Type mismatch: expected %v, got %v\n", elementKind, value.Kind)
 	}
-	elementSize := getElementSize(elementKind)
+	elementSize := GetElementSize(elementKind)
 	elementPtr := arrayPtr + 6 + uintptr(index)*elementSize
 	switch elementKind {
 	case ValueInt32, ValueFloat32:
@@ -207,7 +207,7 @@ func (heap *Heap) GetArrayElement(arrayPtr uintptr, index int32) (*Value, error)
 	if index < 0 || index >= length {
 		return nil, errors.New("Array index out of bounds")
 	}
-	elementSize := getElementSize(elementKind)
+	elementSize := GetElementSize(elementKind)
 	elementPtr := arrayPtr + 6 + uintptr(index)*elementSize
 	value := &Value{
 		Kind: elementKind,
@@ -221,6 +221,84 @@ func (heap *Heap) GetArrayElement(arrayPtr uintptr, index int32) (*Value, error)
 		return nil, fmt.Errorf("Unsupported element type: %v\n", elementKind)
 	}
 	return value, nil
+}
+
+func (heap *Heap) AllocateStruct(str StructType) (uintptr, error) {
+	// kind struct + struct itself
+	totalSize := uintptr(1 + str.Size)
+	ptr, err := heap.Allocate(totalSize)
+	if err != nil {
+		return 0, err
+	}
+	mem, ok := heap.Memory[ptr]
+	if !ok {
+		return 0, errors.New("Could not allocate memory properly")
+	}
+	mem[0] = byte(ValueStruct)
+	*(*StructType)(unsafe.Pointer(ptr + 1)) = str
+	return ptr, nil
+}
+
+func (heap *Heap) GetStructField(structPtr uintptr, fieldName string) (*Value, error) {
+	mem, exists := heap.Memory[structPtr]
+	if !exists {
+		return nil, errors.New("Invalid memory address")
+	}
+	if ValueKind(mem[0]) != ValueStruct {
+		return nil, errors.New("Not a struct")
+	}
+	structType := *(*StructType)(unsafe.Pointer(structPtr + 1))
+	for _, field := range structType.Fields {
+		if field.Name == fieldName {
+			fieldPtr := structPtr + 1 + uintptr(unsafe.Sizeof(StructType{})) + uintptr(field.Offset)
+			switch field.Type {
+			case ValueFloat32, ValueInt32:
+				value := &Value{
+					Kind: field.Type,
+					Raw:  *(*uint32)(unsafe.Pointer(fieldPtr)),
+				}
+				return value, nil
+			case ValuePtr, ValueString, ValueStruct, ValueArray:
+				value := &Value{
+					Kind: field.Type,
+					Ptr:  *(*uintptr)(unsafe.Pointer(fieldPtr)),
+				}
+				return value, nil
+			default:
+				return nil, fmt.Errorf("Unsupported field type: %v\n", field.Type)
+			}
+		}
+	}
+	return nil, fmt.Errorf("Field %s is not found on struct\n", fieldName)
+}
+
+func (heap *Heap) SetStructureField(structPtr uintptr, fieldName string, value Value) error {
+	mem, exists := heap.Memory[structPtr]
+	if !exists {
+		return errors.New("Invalid memory address")
+	}
+	if ValueKind(mem[0]) != ValueStruct {
+		return errors.New("Not a struct")
+	}
+	structType := *(*StructType)(unsafe.Pointer(structPtr + 1))
+	for _, field := range structType.Fields {
+		if fieldName == field.Name {
+			if field.Type != value.Kind {
+				return fmt.Errorf("Type mismatch: expected %v, got %v", field.Type, value.Kind)
+			}
+			fieldPtr := structPtr + 1 + uintptr(unsafe.Sizeof(StructType{})) + uintptr(field.Offset)
+			switch field.Type {
+			case ValueFloat32, ValueInt32:
+				*(*uint32)(unsafe.Pointer(fieldPtr)) = value.Raw
+			case ValuePtr, ValueString, ValueStruct, ValueArray:
+				*(*uintptr)(unsafe.Pointer(fieldPtr)) = value.Ptr
+			default:
+				return fmt.Errorf("Unsupported type: %v\n", field.Type)
+			}
+			return nil
+		}
+	}
+	return fmt.Errorf("Field %s not found in struct\n", fieldName)
 }
 
 func (heap *Heap) Debug() {
@@ -263,7 +341,7 @@ func (heap *Heap) Debug() {
 				elementKind := ValueKind(mem[1])
 				length := *(*int32)(unsafe.Pointer(ptr + 2))
 				log.Printf("Decoded array: type=%v, length=%d\n", elementKind, length)
-				elementSize := getElementSize(elementKind)
+				elementSize := GetElementSize(elementKind)
 				for i := int32(0); i < length; i++ {
 					elementPtr := ptr + 6 + uintptr(i)*elementSize
 					switch elementKind {
@@ -279,6 +357,9 @@ func (heap *Heap) Debug() {
 					}
 				}
 			}
+		case ValueStruct:
+			structType := *(*StructType)(unsafe.Pointer(ptr + 1))
+			fmt.Printf("%v\n", structType)
 		default:
 			log.Printf("Unkown value: %v\n", kind)
 		}

@@ -15,25 +15,39 @@ func to32bits(f float32) [4]byte {
 }
 
 func main() {
-	// floatBites := to32bits(5.0)
+	floatBites := to32bits(5.0)
 	// floatBites2 := to32bits(2.0)
 	bytecode := []byte{
+		byte(vm.DEFSTRUCT),
+		'p', 'o', 'i', 'n', 't', 0,
+		0x02,
+
+		'x', 0,
+		byte(common.ValueFloat32),
+
+		'y', 0,
+		byte(common.ValueFloat32),
+
 		byte(vm.FUNC),
 		byte(vm.FUNC_MAIN),
 		0x00, 0x00,
-		byte(common.VoidValue),
-		byte(vm.CALL),
-		0x00, 0x0E,
-		byte(vm.HALT),
+		byte(common.ValueVoid),
 
-		byte(vm.FUNC),
-		byte(vm.FUNC_NORMAL),
-		0x00, 0x00,
-		byte(common.ValueInt32),
+		byte(vm.NEWSTRUCT),
+		'p', 'o', 'i', 'n', 't', 0,
+		byte(vm.DUP),
+
 		byte(vm.PUSH),
-		byte(common.ValueInt32),
-		0x00, 0x00, 0x00, 0x45,
-		byte(vm.RET),
+		byte(common.ValueFloat32),
+		floatBites[0], floatBites[1], floatBites[2], floatBites[3],
+
+		byte(vm.STFIELD),
+		'x', 0,
+
+		byte(vm.FLDGET),
+		'x', 0,
+
+		byte(vm.HALT),
 	}
 	v := vm.NewVm(bytecode)
 	v.Run()

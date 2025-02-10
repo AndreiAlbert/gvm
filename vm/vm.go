@@ -32,6 +32,7 @@ type VM struct {
 	CallStack []StackFrame
 	Heap      *heap.Heap
 	Functions map[uint]FunctionSignature
+	Structs   map[string]StructType
 }
 
 func (f FunctionSignature) String() string {
@@ -52,10 +53,22 @@ func NewVm(bytecode []byte) *VM {
 		Running:   true,
 		Heap:      heap.NewHeap(),
 		Functions: make(map[uint]FunctionSignature),
+		Structs:   make(map[string]StructType),
 	}
 	vm.buildFunctionTable()
+	vm.buildStructsTable()
 	vm.PushFrame(0)
 	return vm
+}
+
+func (v *VM) extractString() string {
+	start := v.Ip
+	for v.Bytecode[v.Ip] != 0 {
+		v.Ip++
+	}
+	str := string(v.Bytecode[start:v.Ip])
+	v.Ip++
+	return str
 }
 
 func (v *VM) buildFunctionTable() {
@@ -74,6 +87,8 @@ func (v *VM) buildFunctionTable() {
 			}
 			if isMain && foudnMain {
 				log.Fatal("Multiple main functions")
+			} else if isMain && signature.ReturnType != ValueVoid {
+				log.Fatal("Main function should always be void")
 			} else if isMain {
 				mainAddr = signature.Address
 				foudnMain = true
@@ -89,6 +104,60 @@ func (v *VM) buildFunctionTable() {
 		log.Fatal("No main function found")
 	}
 	v.Ip = mainAddr
+}
+
+func (v *VM) buildStructsTable() {
+	ip := uint(0)
+	for ip < uint(len(v.Bytecode)) {
+		if v.Bytecode[ip] == byte(DEFSTRUCT) {
+			ip++
+			start := ip
+			for v.Bytecode[ip] != 0 {
+				ip++
+			}
+			currentOffset := uint(0)
+			structName := string(v.Bytecode[start:ip])
+			ip++
+			fieldsNumber := uint8(v.Bytecode[ip])
+			ip++
+			fields := make([]StructField, fieldsNumber)
+			for i := 0; i < int(fieldsNumber); i++ {
+				start := ip
+				for v.Bytecode[ip] != 0 {
+					ip++
+				}
+				fieldName := string(v.Bytecode[start:ip])
+				ip++
+				fieldType := ValueKind(v.Bytecode[ip])
+				ip++
+
+				var arrayType *ValueKind
+
+				if fieldType == ValueArray {
+					elemType := ValueKind(v.Bytecode[ip])
+					arrayType = &elemType
+					ip++
+				}
+
+				fields[i] = StructField{
+					Name:      fieldName,
+					Type:      fieldType,
+					Offset:    currentOffset,
+					ArrayType: arrayType,
+				}
+				currentOffset += uint(heap.GetElementSize(fieldType))
+			}
+			structType := StructType{
+				Name:    structName,
+				Fields:  fields,
+				Size:    currentOffset,
+				Methods: make(map[string]uint),
+			}
+			v.Structs[structName] = structType
+		} else {
+			ip++
+		}
+	}
 }
 
 func (v *VM) PushFrame(returnAddress uint) {
@@ -141,8 +210,6 @@ func (v *VM) push(value Value) {
 }
 
 func (v *VM) pop() Value {
-	fmt.Println("calling pop for some fucking reason")
-	fmt.Printf("CE PULA MEA: %d\n", v.Ip)
 	if len(v.CallStack) == 0 {
 		log.Fatalf("call stack empty")
 	}
@@ -169,6 +236,22 @@ func (v *VM) debugState(opcode Opcode) {
 	}
 	fmt.Println("========================================")
 	fmt.Println()
+	fmt.Printf("Structs table:\n")
+	for name, s := range v.Structs {
+		fmt.Printf("Struct %s:\n", name)
+		fmt.Printf("  Size: %d bytes\n", s.Size)
+		fmt.Printf("  Fields:\n")
+		for _, field := range s.Fields {
+			fmt.Printf("    %s: type=%v offset=%d\n",
+				field.Name, field.Type, field.Offset)
+		}
+		fmt.Printf("  Methods:\n")
+		for methodName, addr := range s.Methods {
+			fmt.Printf("    %s: address=%d\n", methodName, addr)
+		}
+		fmt.Println()
+	}
+	fmt.Println("========================================")
 	if len(v.CallStack) == 0 {
 		fmt.Println("  Call Stack: [empty]")
 	} else {
@@ -552,6 +635,33 @@ func (v *VM) execute(opcode Opcode) {
 	case SYSCALL:
 		call := Systemcall(v.extractUInt16())
 		v.executeSystemCall(call)
+	case NEWSTRUCT:
+		typeName := v.extractString()
+		structType, ok := v.Structs[typeName]
+		if !ok {
+			log.Fatalf("Unkown struct type: %s", typeName)
+		}
+		ptr, err := v.Heap.AllocateStruct(structType)
+		if err != nil {
+			log.Fatal(err)
+		}
+		v.push(PtrValue(ptr))
+	case FLDGET:
+		fieldName := v.extractString()
+		structPtr := v.pop().AsPtr()
+		value, err := v.Heap.GetStructField(structPtr, fieldName)
+		if err != nil {
+			log.Fatal(err)
+		}
+		v.push(*value)
+	case STFIELD:
+		value := v.pop()
+		structPtr := v.pop().AsPtr()
+		fieldName := v.extractString()
+		err := v.Heap.SetStructureField(structPtr, fieldName, value)
+		if err != nil {
+			log.Fatal(err)
+		}
 	case FUNC:
 		v.Ip += 5
 	}
