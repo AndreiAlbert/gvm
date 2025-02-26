@@ -567,23 +567,19 @@ func (v *VM) execute(opcode Opcode) {
 		}
 		bytes := uintptr(topOfStack.AsInt32())
 		ptr, err := v.Heap.Allocate(bytes)
-		fmt.Printf("allocating %d\n", ptr)
 		if err != nil {
 			log.Fatal(err)
 		}
 		v.push(PtrValue(ptr))
 	case FREE:
 		ptr := v.pop().AsPtr()
-		fmt.Printf("freeing %d\n", ptr)
 		err := v.Heap.Free(ptr)
 		if err != nil {
 			log.Fatal(err)
 		}
 	case LOADH:
 		ptr := v.pop().AsPtr()
-		fmt.Printf("loading %d\n", ptr)
 		value, err := v.Heap.LoadValue(ptr)
-		fmt.Printf("%v\n", value)
 		if err != nil {
 			log.Fatal(err)
 		}

@@ -55,7 +55,6 @@ func TestNextToken(t *testing.T) {
 		fjne label5 2.5
 		call func1
 		ret
-		retv
 
 		; Test arrays
 		newarr int32
@@ -166,7 +165,6 @@ func TestNextToken(t *testing.T) {
 		{CALL, "call"},
 		{IDENT, "func1"},
 		{RET, "ret"},
-		{RETV, "retv"},
 
 		{NEWARR, "newarr"},
 		{INT32, "int32"},

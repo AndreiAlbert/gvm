@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"strings"
 )
 
 type ValueKind byte
@@ -37,6 +38,47 @@ type Value struct {
 	Kind ValueKind
 	Raw  uint32 // 4 bytes
 	Ptr  uintptr
+}
+
+func (sf StructField) String() string {
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("%s: ", sf.Name))
+
+	if sf.ArrayType != nil {
+		sb.WriteString(fmt.Sprintf("array<%v>", *sf.ArrayType))
+	} else if sf.StructType != "" {
+		sb.WriteString(sf.StructType)
+	} else {
+		sb.WriteString(fmt.Sprintf("%v", sf.Type))
+	}
+
+	sb.WriteString(fmt.Sprintf(" (offset: %d)", sf.Offset))
+	return sb.String()
+}
+
+func (st StructType) String() string {
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("struct %s {\n", st.Name))
+
+	// Fields
+	for _, field := range st.Fields {
+		sb.WriteString(fmt.Sprintf("  %s\n", field.String()))
+	}
+
+	// Size
+	sb.WriteString(fmt.Sprintf("  size: %d bytes\n", st.Size))
+
+	// Methods
+	if len(st.Methods) > 0 {
+		sb.WriteString("  methods: {\n")
+		for name, addr := range st.Methods {
+			sb.WriteString(fmt.Sprintf("    %s: @%d\n", name, addr))
+		}
+		sb.WriteString("  }\n")
+	}
+
+	sb.WriteString("}")
+	return sb.String()
 }
 
 func (v ValueKind) String() string {
