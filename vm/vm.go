@@ -299,7 +299,6 @@ func (v *VM) execute(opcode Opcode) {
 	case HALT:
 		v.Running = false
 	case PUSH:
-		fmt.Println("am ajuns la push??")
 		typeTag := v.getByte()
 		bits := v.extractUInt32()
 		var val Value

@@ -17,12 +17,15 @@ const (
 	RBRACE    // }
 	COMMA     // ,
 	ARROW     // ->
+	LBRACKET  // [
+	RBRACKET  // ]
 
 	//Keywords
 	FUNC
 	STRUCT
 	INT32
 	FLOAT32
+	STRING_TYPE
 	VOID
 	RETURN
 
@@ -113,6 +116,7 @@ var keywords = map[string]TokenType{
 	"return":   RETURN,
 	".text":    SECTION_TEXT,
 	".structs": SECTION_STRUCTS,
+	"string":   STRING_TYPE,
 }
 
 var instructions = map[string]TokenType{
@@ -227,6 +231,12 @@ func (t TokenType) String() string {
 		return "SECTION_TEXT"
 	case SECTION_STRUCTS:
 		return "SECTION_STRUCTS"
+	case STRING_TYPE:
+		return "STRING_TYPE"
+	case LBRACKET:
+		return "LBRACKET"
+	case RBRACKET:
+		return "RBRACKET"
 	default:
 		if instr, exists := reverseInstructions[t]; exists {
 			return instr

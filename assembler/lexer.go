@@ -47,6 +47,10 @@ func (l *Lexer) NextToken() Token {
 		tok = newToken(RBRACE, string(l.ch), l.line, l.columnn)
 	case ',':
 		tok = newToken(COMMA, string(l.ch), l.line, l.columnn)
+	case '[':
+		tok = newToken(LBRACKET, string(l.ch), l.line, l.columnn)
+	case ']':
+		tok = newToken(RBRACKET, string(l.ch), l.line, l.columnn)
 	case '-':
 		if l.peekChar() == '>' {
 			ch := l.ch
@@ -175,7 +179,7 @@ func (l *Lexer) readNumber() Token {
 	if _, err := strconv.ParseInt(numStr, 10, 32); err != nil {
 		return Token{Type: ILLEGAL, Literal: "Invalid integer format"}
 	}
-	return Token{Type: INT, Literal: numStr, Line: l.line, Column: l.columnn}
+	return Token{Type: INT, Literal: numStr}
 }
 
 func isLetter(ch byte) bool {

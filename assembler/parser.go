@@ -170,6 +170,8 @@ func TokenTypeToValueKind(t TokenType) ValueKind {
 		return ValueFloat32
 	case VOID:
 		return ValueVoid
+	case STRING_TYPE:
+		return ValueString
 	default:
 		return ValueVoid
 	}
@@ -308,23 +310,50 @@ func (p *Parser) parseStructDef() *StructType {
 	for p.currentToken.Type != RBRACE && p.currentToken.Type != EOF {
 		field := StructField{}
 		if p.currentToken.Type != IDENT {
-			p.errors = append(p.errors, fmt.Sprintf("epxected field name, got %v at line %d", p.currentToken.Type, p.currentToken.Line))
+			p.errors = append(p.errors, fmt.Sprintf("expected field name, got %v at line %d", p.currentToken.Type, p.currentToken.Line))
 			return nil
 		}
 		field.Name = p.currentToken.Literal
 		if !p.expectToken(COLON) {
 			return nil
 		}
-		if !p.expectToken(INT32) && !p.expectToken(FLOAT32) {
+
+		// Parse the field type
+		if !p.expectToken(INT32) && !p.expectToken(FLOAT32) && !p.expectToken(STRING_TYPE) {
 			p.errors = append(p.errors, fmt.Sprintf("expected type, got %v at line %d", p.currentToken.Type, p.currentToken.Line))
 			return nil
 		}
-		field.Type = TokenTypeToValueKind(p.currentToken.Type)
+
+		// Save the type we just parsed
+		baseType := p.currentToken.Type
+		valueType := TokenTypeToValueKind(baseType)
+
+		// Check if the next token is a left bracket (array type)
+		if p.peekToken.Type == LBRACKET {
+			// This is an array type
+			field.Type = ValueArray
+			elementType := valueType
+			field.ArrayType = &elementType
+
+			// Consume the brackets
+			if !p.expectToken(LBRACKET) {
+				p.errors = append(p.errors, fmt.Sprintf("expected [, got %v at line %d", p.currentToken.Type, p.currentToken.Line))
+				return nil
+			}
+			if !p.expectToken(RBRACKET) {
+				p.errors = append(p.errors, fmt.Sprintf("expected ], got %v at line %d", p.currentToken.Type, p.currentToken.Line))
+				return nil
+			}
+		} else {
+			// Regular non-array type
+			field.Type = valueType
+		}
+
 		structType.Fields = append(structType.Fields, field)
 		p.nextToken()
 	}
 	if p.currentToken.Type != RBRACE {
-		p.errors = append(p.errors, fmt.Sprintf("epxected }, got %v at line %d", p.currentToken.Type, p.currentToken.Line))
+		p.errors = append(p.errors, fmt.Sprintf("expected }, got %v at line %d", p.currentToken.Type, p.currentToken.Line))
 		return nil
 	}
 	p.nextToken()

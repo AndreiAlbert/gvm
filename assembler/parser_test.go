@@ -263,7 +263,7 @@ func TestParseInstructions(t *testing.T) {
 	}
 }
 
-func TestCompleteProgram(t *testing.T) {
+func TestCompleteProgramParsing(t *testing.T) {
 	input := `.structs
         struct Point {
             x: int32
