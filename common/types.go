@@ -32,6 +32,7 @@ const (
 	ValueArray
 	ValueVoid
 	ValueStruct
+	ValueByte
 )
 
 type Value struct {
@@ -106,6 +107,20 @@ func (v Value) AsPtr() uintptr {
 	return v.Ptr
 }
 
+func (v Value) AsByte() byte {
+	if v.Kind != ValueByte {
+		log.Fatalf("Value is not byte, its %v\n", v.Kind)
+	}
+	return byte(v.Raw & 0xFF)
+}
+
+func ByteValue(val byte) Value {
+	return Value{
+		Kind: ValueByte,
+		Raw:  uint32(val),
+	}
+}
+
 func PtrValue(ptr uintptr) Value {
 	return Value{
 		Kind: ValuePtr,
@@ -135,6 +150,8 @@ func (v Value) String() string {
 		return fmt.Sprintf("%f", v.AsFloat32())
 	case ValuePtr, ValueString, ValueStruct:
 		return fmt.Sprintf("%d", v.AsPtr())
+	case ValueByte:
+		return fmt.Sprintf("%d", v.AsByte())
 	default:
 		return fmt.Sprintf("<unknown ValueKind %d: raw=0x%08X>", v.Kind, v.Raw)
 	}

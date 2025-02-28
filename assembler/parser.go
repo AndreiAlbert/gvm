@@ -4,6 +4,7 @@ import (
 	"fmt"
 	. "stack_vm/common"
 	"stack_vm/vm"
+	"strconv"
 	"strings"
 )
 
@@ -456,7 +457,7 @@ func (p *Parser) parseInstruction() *Instruction {
 	p.nextToken()
 	switch opcode {
 	case vm.PUSH:
-		if p.currentToken.Type != INT32 && p.currentToken.Type != FLOAT32 {
+		if p.currentToken.Type != INT32 && p.currentToken.Type != FLOAT32 && p.currentToken.Type != BYTE_TYPE {
 			p.errors = append(p.errors, fmt.Sprintf("push requires operand type first, got %v at line %d", p.currentToken.Type, p.currentToken.Line))
 			p.nextToken()
 			return nil
@@ -538,6 +539,29 @@ func (p *Parser) parseInstruction() *Instruction {
 		return instr
 	case vm.RET:
 		return instr
+	case vm.SYSCALL:
+		if p.currentToken.Type == INT {
+			if value, err := strconv.ParseUint(p.currentToken.Literal, 10, 16); err != nil || value > 65535 {
+				p.errors = append(p.errors, fmt.Sprintf("invalid syscall number %s at line %d", p.currentToken.Literal, p.currentToken.Line))
+				p.nextToken()
+				return nil
+			}
+			instr.Operands = append(instr.Operands, p.currentToken)
+			p.nextToken()
+		} else if value, exists := syscallValues[p.currentToken.Type]; exists {
+			token := Token{
+				Type:    INT,
+				Literal: fmt.Sprintf("%d", value),
+				Line:    p.currentToken.Line,
+				Column:  p.currentToken.Column,
+			}
+			instr.Operands = append(instr.Operands, token)
+			p.nextToken()
+		} else {
+			p.errors = append(p.errors, fmt.Sprintf("expected syscall name or number, got %v at line %d", p.currentToken.Type, p.currentToken.Line))
+			p.nextToken()
+			return nil
+		}
 	default:
 		p.errors = append(p.errors, fmt.Sprintf("unkown instruction %v at line %d", opcode, p.currentToken.Line))
 		p.nextToken()

@@ -26,6 +26,7 @@ const (
 	INT32
 	FLOAT32
 	STRING_TYPE
+	BYTE_TYPE
 	VOID
 	RETURN
 
@@ -78,6 +79,11 @@ const (
 
 	// String instructions
 	STRALLOC
+	SYSCALL_STR_LEN
+	SYSCALL_STR_CAT
+	SYSCALL_STR_EQUALS
+	SYSCALL_WRITE_BYTE
+	SYSCALL_READ_BYTE
 
 	// Struct instructions
 	NEWSTRUCT
@@ -117,6 +123,13 @@ var keywords = map[string]TokenType{
 	".text":    SECTION_TEXT,
 	".structs": SECTION_STRUCTS,
 	"string":   STRING_TYPE,
+	"byte":     BYTE_TYPE,
+	// Syscall keywords
+	"str_len":    SYSCALL_STR_LEN,
+	"str_cat":    SYSCALL_STR_CAT,
+	"str_equals": SYSCALL_STR_EQUALS,
+	"write_byte": SYSCALL_WRITE_BYTE,
+	"read_byte":  SYSCALL_READ_BYTE,
 }
 
 var instructions = map[string]TokenType{
@@ -180,6 +193,15 @@ var instructions = map[string]TokenType{
 	"stfield":   STFIELD,
 }
 
+// Add a map to convert syscall token types to their numeric values
+var syscallValues = map[TokenType]uint16{
+	SYSCALL_STR_LEN:    0, // STR_LEN
+	SYSCALL_STR_CAT:    1, // STR_CAT
+	SYSCALL_STR_EQUALS: 2, // STR_EQUALS
+	SYSCALL_WRITE_BYTE: 3, // WRITE_BYTE
+	SYSCALL_READ_BYTE:  4, // READ_BYTE
+}
+
 func (t TokenType) String() string {
 	var reverseInstructions map[TokenType]string
 	reverseInstructions = make(map[TokenType]string)
@@ -237,6 +259,8 @@ func (t TokenType) String() string {
 		return "LBRACKET"
 	case RBRACKET:
 		return "RBRACKET"
+	case BYTE_TYPE:
+		return "BYTE_TYPE"
 	default:
 		if instr, exists := reverseInstructions[t]; exists {
 			return instr

@@ -2,6 +2,7 @@ package vm
 
 import (
 	"log"
+	"os"
 	"stack_vm/common"
 )
 
@@ -11,6 +12,8 @@ const (
 	STR_LEN Systemcall = iota
 	STR_CAT
 	STR_EQUALS
+	WRITE_BYTE
+	READ_BYTE
 )
 
 func (v *VM) executeSystemCall(call Systemcall) {
@@ -54,5 +57,26 @@ func (v *VM) executeSystemCall(call Systemcall) {
 		} else {
 			v.push(common.Int32Value(0))
 		}
+	case WRITE_BYTE:
+		value := v.pop()
+		var byteValue byte
+		if value.Kind == common.ValueByte {
+			byteValue = value.AsByte()
+		} else if value.Kind == common.ValueInt32 {
+			byteValue = byte(value.AsInt32() & 0xFF)
+		} else {
+			log.Fatal("WRITE_BYTE expects a byte or int32 value")
+		}
+		_, err := os.Stdout.Write([]byte{byteValue})
+		if err != nil {
+			log.Fatal(err)
+		}
+	case READ_BYTE:
+		var buffer [1]byte
+		_, err := os.Stdin.Read(buffer[:])
+		if err != nil {
+			log.Fatal(err)
+		}
+		v.push(common.ByteValue(buffer[0]))
 	}
 }

@@ -31,9 +31,6 @@ func (g *CodeGenerator) Generate() ([]byte, error) {
 		return nil, err
 	}
 	for _, function := range g.program.Functions {
-		fmt.Printf("Generating function: %s\n", function.Name)
-		headerStart := uint(len(g.bytecode))
-		fmt.Printf("  Header starts at address %d\n", headerStart)
 		g.emitByte(byte(vm.FUNC))
 		if function.Name == "main" {
 			g.emitByte(byte(vm.FUNC_MAIN))
@@ -52,18 +49,12 @@ func (g *CodeGenerator) Generate() ([]byte, error) {
 		}
 		bodyStart := uint(len(g.bytecode))
 		g.functionTable[function.Name] = bodyStart
-		fmt.Printf("  Body starts at address %d\n", bodyStart)
 		g.currentFunction = &function
-		fmt.Printf("Function has %d instructions\n", len(function.Body))
-		for i, instruction := range function.Body {
-			instrPos := uint(len(g.bytecode))
-			fmt.Printf("	instruction #%d at address %d: %v\n", i, instrPos, instruction.Opcode)
+		for _, instruction := range function.Body {
 			if err := g.generateInstruction(instruction); err != nil {
 				return nil, fmt.Errorf("error generating instruction %v: %w", instruction, err)
 			}
 		}
-		bodyEnd := uint(len(g.bytecode))
-		fmt.Printf("	Function body complete at address %d (size %d bytes)\n", bodyEnd, bodyEnd-bodyStart)
 	}
 	g.emitByte(byte(vm.HALT))
 	return g.bytecode, nil
@@ -88,32 +79,23 @@ func (g *CodeGenerator) defineStructs() error {
 }
 
 func (g *CodeGenerator) generateFunctionMetadata() error {
-	fmt.Println("\n=== Generating Function Metadata ===")
-
 	for _, function := range g.program.Functions {
 		// Record function header start position
-		headerStart := uint(len(g.bytecode))
-		fmt.Printf("Function '%s' header starts at: %d\n", function.Name, headerStart)
-
 		// Emit FUNC opcode
 		g.emitByte(byte(vm.FUNC))
 
 		// Emit function type (main or normal)
 		if function.Name == "main" {
 			g.emitByte(byte(vm.FUNC_MAIN))
-			fmt.Printf("  Marked as MAIN function\n")
 		} else {
 			g.emitByte(byte(vm.FUNC_NORMAL))
 		}
-
 		// Emit parameter count
 		paramCountBytes := make([]byte, 2)
 		binary.BigEndian.PutUint16(paramCountBytes, uint16(len(function.Params)))
 		g.emitBytes(paramCountBytes)
-
 		// Emit return type
 		g.emitByte(byte(function.ReturnType))
-
 		// For struct returns, emit the struct name
 		if function.ReturnType == ValueStruct {
 			if _, exists := g.structTable[function.ReturnStructName]; !exists {
@@ -122,61 +104,29 @@ func (g *CodeGenerator) generateFunctionMetadata() error {
 			}
 			g.emitString(function.ReturnStructName)
 		}
-
 		// Record where this function's body will begin
 		bodyStart := uint(len(g.bytecode))
 		g.functionTable[function.Name] = bodyStart
-
-		fmt.Printf("  Function '%s' body will start at: %d\n", function.Name, bodyStart)
 	}
-
-	fmt.Println("=== Function Metadata Complete ===")
 	return nil
 }
 
 // Improved method to generate all function bodies with accurate address tracking
 func (g *CodeGenerator) generateAllFunctionBodies() error {
-	fmt.Println("\n=== Generating Function Bodies ===")
 	for _, function := range g.program.Functions {
 		bodyAddr := g.functionTable[function.Name]
-		fmt.Printf("Generating body for function '%s' at address %d\n", function.Name, bodyAddr)
-
-		// Confirm we're at the right position in the bytecode
 		currentPos := uint(len(g.bytecode))
 		if currentPos != bodyAddr {
-			fmt.Printf("  WARNING: Current position (%d) doesn't match expected body address (%d)\n",
-				currentPos, bodyAddr)
-			// Update function table with actual position
 			g.functionTable[function.Name] = currentPos
-			fmt.Printf("  Corrected function table entry to %d\n", currentPos)
 		}
 		g.currentFunction = &function
-		fmt.Printf("  Function has %d instructions\n", len(function.Body))
-		for i, instruction := range function.Body {
-			instrPos := uint(len(g.bytecode))
-			fmt.Printf("  Instruction #%d at address %d: %v\n", i, instrPos, instruction.Opcode)
+		for _, instruction := range function.Body {
 
 			if err := g.generateInstruction(instruction); err != nil {
 				return fmt.Errorf("error generating instruction %v: %w", instruction, err)
 			}
 		}
-		fmt.Printf("  Function '%s' body completed at address %d\n", function.Name, len(g.bytecode)-1)
 	}
-	fmt.Println("=== Function Body Generation Complete ===")
-	// Print the final function table
-	fmt.Println("\nFinal Function Table:")
-	for name, addr := range g.functionTable {
-		fmt.Printf("  %s -> address %d\n", name, addr)
-	}
-	// Dump bytecode for debugging
-	fmt.Println("\nFinal Bytecode:")
-	for i, b := range g.bytecode {
-		if i%16 == 0 {
-			fmt.Printf("\n%04d: ", i)
-		}
-		fmt.Printf("%02X ", b)
-	}
-	fmt.Println("\n")
 	return nil
 }
 
@@ -203,6 +153,16 @@ func (g *CodeGenerator) generateInstruction(inst Instruction) error {
 				return err
 			}
 			g.emitFloat32(value)
+		} else if typeToken.Type == BYTE_TYPE {
+			g.emitByte(byte(ValueByte))
+			value, err := parseInt32(valueToken.Literal)
+			if err != nil {
+				return err
+			}
+			if value < 0 || value > 255 {
+				return fmt.Errorf("byte value out of range: %d", value)
+			}
+			g.emitByte(byte(value))
 		} else {
 			return fmt.Errorf("unsupported type in push: %v", typeToken.Type)
 		}
@@ -265,7 +225,14 @@ func (g *CodeGenerator) generateInstruction(inst Instruction) error {
 		g.emitUint16(uint16(len(str.Literal)))
 		g.bytecode = append(g.bytecode, []byte(str.Literal)...)
 	case vm.SYSCALL:
-		g.emitUint16(0)
+		if len(inst.Operands) != 1 {
+			return fmt.Errorf("syscall requires one operand(syscall number or name), got %d", len(inst.Operands))
+		}
+		syscall, err := strconv.ParseUint(inst.Operands[0].Literal, 10, 16)
+		if err != nil {
+			return fmt.Errorf("invalid syscall number: %s", inst.Operands[0].Literal)
+		}
+		g.emitUint16(uint16(syscall))
 	case vm.NEWARR:
 		if len(inst.Operands) != 1 {
 			return fmt.Errorf("newarr requires one operand, got %d", len(inst.Operands))

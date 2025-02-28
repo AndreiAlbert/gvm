@@ -510,7 +510,6 @@ func TestInvalidInstructions(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			prog := createTestProgram()
-
 			// Add a test function with the invalid instruction
 			instructions := []Instruction{test.instruction}
 			addTestFunction(prog, "main", ValueVoid, []ParsedParam{}, instructions, map[string]int{})

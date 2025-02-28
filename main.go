@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/binary"
-	"fmt"
 	"log"
 	"math"
 	"os"
@@ -27,7 +26,6 @@ func runFile(filename string) {
 	if err != nil {
 		log.Fatalf("Failed to read file: %v", err)
 	}
-	fmt.Printf("Content: %s", content)
 	lexer := assembler.NewLexer(string(content))
 	parser := assembler.NewParser(lexer)
 	prog, err := parser.Parse()
@@ -36,7 +34,6 @@ func runFile(filename string) {
 	}
 	generator := assembler.NewCodeGenerator(prog)
 	bytecode, err := generator.Generate()
-	fmt.Println(bytecode)
 	if err != nil {
 		log.Fatalf("Failed to generate bytecode: %v", err)
 	}

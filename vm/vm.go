@@ -1,12 +1,10 @@
 package vm
 
 import (
-	"bufio"
 	"encoding/binary"
 	"fmt"
 	"log"
 	"math"
-	"os"
 	. "stack_vm/common"
 	"stack_vm/heap"
 	"strings"
@@ -117,9 +115,7 @@ func (v *VM) buildFunctionTable() {
 				foundMain = true
 				signature.isMain = true
 			}
-
 			v.Functions[signature.Address] = signature
-			fmt.Printf("%+v\n", signature)
 		} else {
 			ip++
 		}
@@ -216,9 +212,9 @@ func (v *VM) getByte() byte {
 }
 
 func (v *VM) Run() {
-	reader := bufio.NewReader(os.Stdin)
+	// reader := bufio.NewReader(os.Stdin)
 	for v.Running {
-		reader.ReadString('\n')
+		// reader.ReadString('\n')
 		opcode := v.getByte()
 		v.execute(Opcode(opcode))
 	}
@@ -317,20 +313,26 @@ func (v *VM) debugState(opcode Opcode) {
 }
 
 func (v *VM) execute(opcode Opcode) {
-	v.debugState(opcode)
-	v.Heap.Debug()
+	// v.debugState(opcode)
+	// v.Heap.Debug()
 	switch opcode {
 	case HALT:
 		v.Running = false
 	case PUSH:
 		typeTag := v.getByte()
-		bits := v.extractUInt32()
 		var val Value
 		switch ValueKind(typeTag) {
 		case ValueInt32:
+			bits := v.extractUInt32()
 			val = Value{Kind: ValueInt32, Raw: bits}
 		case ValueFloat32:
+			bits := v.extractUInt32()
 			val = Value{Kind: ValueFloat32, Raw: bits}
+		case ValueByte:
+			bits := uint32(v.getByte())
+			val = Value{Kind: ValueByte, Raw: bits}
+		default:
+			log.Fatalf("Unsupported type in PUSH: %v", ValueKind(typeTag))
 		}
 		v.push(val)
 	case POP:
