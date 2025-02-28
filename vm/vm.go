@@ -57,7 +57,15 @@ func NewVm(bytecode []byte) *VM {
 		Structs:   make(map[string]StructType),
 	}
 	vm.buildFunctionTable()
-	vm.buildStructsTable()
+	hasStrucs := false
+	if len(bytecode) > 0 {
+		if bytecode[0] == byte(DEFSTRUCT) {
+			hasStrucs = true
+		}
+	}
+	if hasStrucs {
+		vm.buildStructsTable()
+	}
 	vm.PushFrame(0xFFFFFFFF)
 	return vm
 }

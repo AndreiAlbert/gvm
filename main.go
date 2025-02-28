@@ -6,6 +6,7 @@ import (
 	"log"
 	"math"
 	"os"
+	"path/filepath"
 
 	"stack_vm/assembler"
 	"stack_vm/vm"
@@ -17,40 +18,35 @@ func to32bits(f float32) [4]byte {
 	return buffer
 }
 
-func main() {
-	lexer := assembler.NewLexer(`.structs
-		struct person {
-			age: int32
-		}
-		.text
-		func newperson(age: int32) -> person {
-			store 0			
-			newstruct person 
-			dup 
-			load 0		
-			stfield "age"
-			ret
-		}
-		func main() -> void {
-			push int32 42
-			call newperson
-			fldget "age"
-			ret
-		}
-		`)
+func runFile(filename string) {
+	absPath, err := filepath.Abs(filename)
+	if err != nil {
+		log.Fatalf("Failed to get absolute path: %v", err)
+	}
+	content, err := os.ReadFile(absPath)
+	if err != nil {
+		log.Fatalf("Failed to read file: %v", err)
+	}
+	fmt.Printf("Content: %s", content)
+	lexer := assembler.NewLexer(string(content))
 	parser := assembler.NewParser(lexer)
-	var prog *assembler.Program
-	var err error
-	if prog, err = parser.Parse(); err != nil {
-		fmt.Printf("%+v", err)
-		os.Exit(1)
+	prog, err := parser.Parse()
+	if err != nil {
+		log.Fatalf("Failed to parse progrmam: %v", err)
 	}
 	generator := assembler.NewCodeGenerator(prog)
 	bytecode, err := generator.Generate()
-	if err != nil {
-		log.Fatal(err)
-	}
 	fmt.Println(bytecode)
+	if err != nil {
+		log.Fatalf("Failed to generate bytecode: %v", err)
+	}
 	vm := vm.NewVm(bytecode)
 	vm.Run()
+}
+
+func main() {
+	if len(os.Args) < 2 {
+		log.Fatal("Not enough arguments")
+	}
+	runFile(os.Args[1])
 }
