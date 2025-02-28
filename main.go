@@ -18,18 +18,24 @@ func to32bits(f float32) [4]byte {
 }
 
 func main() {
-	lexer := assembler.NewLexer(` .structs
+	lexer := assembler.NewLexer(`.structs
 		struct person {
 			age: int32
-			name: string
 		}
 		.text
-		func main() -> void {
-			newstruct person
-			dup	
-			push int32 42
+		func newperson(age: int32) -> person {
+			store 0			
+			newstruct person 
+			dup 
+			load 0		
 			stfield "age"
-			fldget "age"	
+			ret
+		}
+		func main() -> void {
+			push int32 42
+			call newperson
+			fldget "age"
+			ret
 		}
 		`)
 	parser := assembler.NewParser(lexer)
@@ -39,12 +45,12 @@ func main() {
 		fmt.Printf("%+v", err)
 		os.Exit(1)
 	}
-	fmt.Printf("%+v\n", prog)
 	generator := assembler.NewCodeGenerator(prog)
 	bytecode, err := generator.Generate()
 	if err != nil {
 		log.Fatal(err)
 	}
+	fmt.Println(bytecode)
 	vm := vm.NewVm(bytecode)
 	vm.Run()
 }

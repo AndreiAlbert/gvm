@@ -23,11 +23,12 @@ type Program struct {
 }
 
 type ParsedFunction struct {
-	Name       string
-	Params     []ParsedParam
-	ReturnType ValueKind
-	Body       []Instruction
-	Labels     map[string]int
+	Name             string
+	Params           []ParsedParam
+	ReturnType       ValueKind
+	Body             []Instruction
+	Labels           map[string]int
+	ReturnStructName string
 }
 
 type ParsedParam struct {
@@ -362,7 +363,8 @@ func (p *Parser) parseStructDef() *StructType {
 
 func (p *Parser) parseFunction() *ParsedFunction {
 	function := &ParsedFunction{
-		Labels: make(map[string]int),
+		Labels:           make(map[string]int),
+		ReturnStructName: "", // Initialize the new field
 	}
 	if !p.expectToken(IDENT) {
 		return nil
@@ -380,7 +382,7 @@ func (p *Parser) parseFunction() *ParsedFunction {
 		}
 		param.Name = p.currentToken.Literal
 		if !p.expectToken(COLON) {
-			p.errors = append(p.errors, fmt.Sprintf("expeted :, got %v at lien %d", p.currentToken.Type, p.currentToken.Line))
+			p.errors = append(p.errors, fmt.Sprintf("expected :, got %v at line %d", p.currentToken.Type, p.currentToken.Line))
 			return nil
 		}
 		if !p.expectToken(INT32) && !p.expectToken(FLOAT32) {
@@ -397,11 +399,21 @@ func (p *Parser) parseFunction() *ParsedFunction {
 	if !p.expectToken(ARROW) {
 		return nil
 	}
-	if !p.expectToken(INT32) && !p.expectToken(FLOAT32) && !p.expectToken(VOID) {
-		p.errors = append(p.errors, fmt.Sprintf("expected return type, got %v at line %d", p.currentToken.Type, p.currentToken.Line))
+
+	// Handle struct return types
+	// Modified return type parsing section
+	if p.expectToken(INT32) || p.expectToken(FLOAT32) || p.expectToken(VOID) || p.expectToken(STRING_TYPE) {
+		function.ReturnType = TokenTypeToValueKind(p.currentToken.Type)
+	} else if p.expectToken(IDENT) {
+		structName := p.currentToken.Literal
+		function.ReturnType = ValueStruct
+		function.ReturnStructName = structName
+	} else {
+		p.errors = append(p.errors, fmt.Sprintf("expected return type, got %v at line %d",
+			p.currentToken.Type, p.currentToken.Line))
 		return nil
 	}
-	function.ReturnType = TokenTypeToValueKind(p.currentToken.Type)
+
 	if !p.expectToken(LBRACE) {
 		p.errors = append(p.errors, fmt.Sprintf("expected {, got %v at line %d", p.currentToken.Type, p.currentToken.Line))
 		return nil

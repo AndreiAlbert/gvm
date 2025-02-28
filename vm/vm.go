@@ -13,10 +13,11 @@ import (
 )
 
 type FunctionSignature struct {
-	Address    uint
-	ParamCount uint16
-	ReturnType ValueKind
-	isMain     bool
+	Address          uint
+	ParamCount       uint16
+	ReturnType       ValueKind
+	isMain           bool
+	ReturnStructName string
 }
 
 type StackFrame struct {
@@ -57,7 +58,7 @@ func NewVm(bytecode []byte) *VM {
 	}
 	vm.buildFunctionTable()
 	vm.buildStructsTable()
-	vm.PushFrame(0)
+	vm.PushFrame(0xFFFFFFFF)
 	return vm
 }
 
@@ -74,33 +75,48 @@ func (v *VM) extractString() string {
 func (v *VM) buildFunctionTable() {
 	ip := uint(0)
 	mainAddr := uint(0)
-	foudnMain := false
+	foundMain := false
 	for ip < uint(len(v.Bytecode)) {
 		if v.Bytecode[ip] == byte(FUNC) {
 			ip++
 			isMain := v.Bytecode[ip] == byte(FUNC_MAIN)
 			ip++
+
 			signature := FunctionSignature{
-				Address:    ip + 3, // skip metadata, get to the 'body' of the function
 				ParamCount: binary.BigEndian.Uint16(v.Bytecode[ip : ip+2]),
 				ReturnType: ValueKind(v.Bytecode[ip+2]),
 			}
-			if isMain && foudnMain {
+			ip += 3 // Skip param count and return type
+			// If it's a struct return type, extract the struct name
+			if signature.ReturnType == ValueStruct {
+				startPos := ip
+				for ip < uint(len(v.Bytecode)) && v.Bytecode[ip] != 0 {
+					ip++
+				}
+				signature.ReturnStructName = string(v.Bytecode[startPos:ip])
+				ip++                   // Skip the null terminator
+				signature.Address = ip // Address points after struct name
+			} else {
+				signature.Address = ip // Standard address after metadata
+			}
+
+			if isMain && foundMain {
 				log.Fatal("Multiple main functions")
 			} else if isMain && signature.ReturnType != ValueVoid {
 				log.Fatal("Main function should always be void")
 			} else if isMain {
 				mainAddr = signature.Address
-				foudnMain = true
+				foundMain = true
 				signature.isMain = true
 			}
+
 			v.Functions[signature.Address] = signature
-			ip += 2
+			fmt.Printf("%+v\n", signature)
 		} else {
 			ip++
 		}
 	}
-	if !foudnMain {
+	if !foundMain {
 		log.Fatal("No main function found")
 	}
 	v.Ip = mainAddr
@@ -491,17 +507,56 @@ func (v *VM) execute(opcode Opcode) {
 			log.Fatal("Cannot RET: local stack empty")
 		}
 		returnValue := calleeFrame.LocalStack[len(calleeFrame.LocalStack)-1]
-		signature := v.Functions[calleeFrame.ReturnAddress]
-		if returnValue.Kind != signature.ReturnType {
-			log.Fatalf("Return type mismatch: expected %v, got %v",
-				signature.ReturnType, returnValue.Kind)
+		// Check for sentinel value (program termination)
+		if calleeFrame.ReturnAddress == 0xFFFFFFFF {
+			fmt.Println("Program execution complete - returning from main")
+			v.Running = false
+			return
 		}
+		var foundCallee bool
+		var calleeReturnType ValueKind
+		var calleeReturnStructName string
+		currentFuncStart := v.Ip - 1
+		for addr, sig := range v.Functions {
+			if currentFuncStart >= addr && currentFuncStart < uint(len(v.Bytecode)) {
+				calleeReturnType = sig.ReturnType
+				calleeReturnStructName = sig.ReturnStructName
+				foundCallee = true
+				break
+			}
+		}
+		// --- Return type checking ---
+		if foundCallee {
+			// Check if return value matches expected type
+			if calleeReturnType != returnValue.Kind {
+				// Special case for struct returns
+				if calleeReturnType == ValueStruct && returnValue.Kind == ValuePtr {
+					// Verify the struct type matches
+					mem, exists := v.Heap.Memory[returnValue.AsPtr()]
+					if !exists || ValueKind(mem[0]) != ValueStruct {
+						log.Fatalf("Return type mismatch: expected struct %s, got %v",
+							calleeReturnStructName, returnValue.Kind)
+					}
+				} else {
+					// Regular type mismatch
+					log.Fatalf("Return type mismatch: function has return type %v, but returning %v",
+						calleeReturnType, returnValue.Kind)
+				}
+			} else {
+				fmt.Printf("Return value type check passed: %v\n", returnValue.Kind)
+			}
+		} else {
+			fmt.Printf("Warning: Could not determine current function for return type checking\n")
+		}
+		// This is to find the function we are returning TO (the caller)
 		v.CallStack = v.CallStack[:len(v.CallStack)-1]
 		if len(v.CallStack) == 0 {
-			log.Fatal("Cannot RET: callstack empty")
+			log.Fatal("Cannot RET: callstack empty after popping frame")
 		}
+		// Push return value onto caller's stack
 		callerFrame := v.getCurrentFrame()
 		callerFrame.LocalStack = append(callerFrame.LocalStack, returnValue)
+		// Set IP to return address
 		v.Ip = calleeFrame.ReturnAddress
 	// return to callee frame without a return value (return void)
 	case RETV:
